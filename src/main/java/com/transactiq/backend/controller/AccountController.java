@@ -2,12 +2,15 @@ package com.transactiq.backend.controller;
 
 import com.transactiq.backend.entity.Account;
 import com.transactiq.backend.service.AccountService;
+import com.transactiq.backend.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/accounts")
@@ -15,6 +18,41 @@ import java.util.List;
 public class AccountController {
     
     private final AccountService accountService;
+    
+    @GetMapping
+    public ResponseEntity<?> getAccounts() {
+        try {
+            Long userId = SecurityUtil.getCurrentUserId();
+            if (userId == null) {
+                return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+            }
+            
+            List<Account> accounts = accountService.getActiveAccountsByUserId(userId);
+            
+            // Format response to match API spec
+            List<Map<String, Object>> formattedAccounts = accounts.stream()
+                    .map(acc -> {
+                        Map<String, Object> accMap = new HashMap<>();
+                        accMap.put("id", acc.getId());
+                        accMap.put("name", acc.getAccountType() + " Account"); // Or use account name if available
+                        accMap.put("type", acc.getAccountType().toLowerCase());
+                        accMap.put("balance", acc.getBalance());
+                        // Mask account number - show last 4 digits
+                        String accountNumber = acc.getAccountNumber();
+                        String maskedNumber = accountNumber.length() > 4 
+                            ? "****" + accountNumber.substring(accountNumber.length() - 4)
+                            : "****" + accountNumber;
+                        accMap.put("accountNumber", maskedNumber);
+                        return accMap;
+                    })
+                    .toList();
+            
+            return ResponseEntity.ok(formattedAccounts);
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Failed to fetch accounts: " + e.getMessage()));
+        }
+    }
     
     @PostMapping
     public ResponseEntity<Account> createAccount(

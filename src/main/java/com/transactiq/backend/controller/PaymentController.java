@@ -7,7 +7,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.transactiq.backend.entity.Account;
+import com.transactiq.backend.service.AccountService;
+import com.transactiq.backend.util.SecurityUtil;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -15,6 +21,7 @@ import java.util.List;
 public class PaymentController {
     
     private final PaymentService paymentService;
+    private final AccountService accountService;
     
     @PostMapping
     public ResponseEntity<Payment> createPayment(@RequestBody Payment payment) {
@@ -37,9 +44,53 @@ public class PaymentController {
     }
     
     @GetMapping
-    public ResponseEntity<List<Payment>> getAllPayments() {
-        List<Payment> payments = paymentService.getAllPayments();
-        return new ResponseEntity<>(payments, HttpStatus.OK);
+    public ResponseEntity<?> getAllPayments() {
+        try {
+            Long userId = SecurityUtil.getCurrentUserId();
+            if (userId == null) {
+                return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+            }
+            
+            // Get user's accounts
+            List<Account> accounts = accountService.getActiveAccountsByUserId(userId);
+            
+            // Get all payments for user's accounts
+            List<Payment> allPayments = accounts.stream()
+                    .flatMap(account -> paymentService.getPaymentsByAccountId(account.getId()).stream())
+                    .sorted((p1, p2) -> p2.getCreatedAt().compareTo(p1.getCreatedAt()))
+                    .toList();
+            
+            // Format response to match API spec
+            List<Map<String, Object>> formattedPayments = allPayments.stream()
+                    .map(payment -> {
+                        Map<String, Object> payMap = new HashMap<>();
+                        payMap.put("id", payment.getId());
+                        payMap.put("description", payment.getDescription() != null ? payment.getDescription() : "Payment");
+                        payMap.put("amount", payment.getAmount());
+                        payMap.put("date", payment.getCreatedAt());
+                        payMap.put("status", payment.getStatus().name().toLowerCase());
+                        return payMap;
+                    })
+                    .toList();
+            
+            return ResponseEntity.ok(formattedPayments);
+            
+        } catch (Exception e) {
+            // Fallback to all payments if user context not available
+            List<Payment> payments = paymentService.getAllPayments();
+            List<Map<String, Object>> formattedPayments = payments.stream()
+                    .map(payment -> {
+                        Map<String, Object> payMap = new HashMap<>();
+                        payMap.put("id", payment.getId());
+                        payMap.put("description", payment.getDescription() != null ? payment.getDescription() : "Payment");
+                        payMap.put("amount", payment.getAmount());
+                        payMap.put("date", payment.getCreatedAt());
+                        payMap.put("status", payment.getStatus().name().toLowerCase());
+                        return payMap;
+                    })
+                    .toList();
+            return ResponseEntity.ok(formattedPayments);
+        }
     }
     
     @GetMapping("/{id}")

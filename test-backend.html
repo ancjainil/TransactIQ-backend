@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TransactIQ Backend Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 TransactIQ Backend Test</h1>
+        <p>Make sure the backend is running on <strong>http://localhost:8080</strong></p>
+        
+        <h2>Test Endpoints</h2>
+        
+        <button onclick="testHealth()">1. Test Health Endpoint</button>
+        <button onclick="testCors()">2. Test CORS</button>
+        <button onclick="testAccounts()">3. Test Accounts (requires DB)</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        
+        function showResult(message, isSuccess = true) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result ' + (isSuccess ? 'success' : 'error');
+            resultDiv.innerHTML = message;
+        }
+        
+        async function testHealth() {
+            try {
+                showResult('Testing health endpoint...');
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(`
+                        <h3>✅ Health Check Success!</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <p><strong>Status Code:</strong> ${response.status}</p>
+                    `, true);
+                } else {
+                    showResult(`❌ Health check failed: ${response.status}`, false);
+                }
+            } catch (error) {
+                showResult(`
+                    <h3>❌ Error</h3>
+                    <p>${error.message}</p>
+                    <p>Make sure the backend is running on http://localhost:8080</p>
+                `, false);
+            }
+        }
+        
+        async function testCors() {
+            try {
+                showResult('Testing CORS configuration...');
+                const response = await fetch(`${API_BASE}/api/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                });
+                
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials'),
+                    'Access-Control-Expose-Headers': response.headers.get('Access-Control-Expose-Headers')
+                };
+                
+                showResult(`
+                    <h3>✅ CORS Test</h3>
+                    <p><strong>Response Status:</strong> ${response.status}</p>
+                    <h4>CORS Headers:</h4>
+                    <pre>${JSON.stringify(corsHeaders, null, 2)}</pre>
+                    ${corsHeaders['Access-Control-Allow-Origin'] === 'http://localhost:5173' 
+                        ? '<p style="color: green;">✅ CORS is correctly configured!</p>' 
+                        : '<p style="color: orange;">⚠️ CORS headers may need adjustment</p>'}
+                `, true);
+            } catch (error) {
+                showResult(`
+                    <h3>❌ CORS Test Failed</h3>
+                    <p>${error.message}</p>
+                    <p>This might be a CORS issue or the backend is not running.</p>
+                `, false);
+            }
+        }
+        
+        async function testAccounts() {
+            try {
+                showResult('Testing accounts endpoint (requires database)...');
+                const response = await fetch(`${API_BASE}/api/accounts/user/1`);
+                const data = await response.json();
+                
+                showResult(`
+                    <h3>✅ Accounts Endpoint Response</h3>
+                    <p><strong>Status Code:</strong> ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `, true);
+            } catch (error) {
+                showResult(`
+                    <h3>⚠️ Accounts Test</h3>
+                    <p>${error.message}</p>
+                    <p>This is normal if the database is not set up yet.</p>
+                `, false);
+            }
+        }
+    </script>
+</body>
+</html>
+
+
