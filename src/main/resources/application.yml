@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: transactiq-backend
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/transactiq_db
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  
+  security:
+    jwt:
+      secret: ${JWT_SECRET:your-secret-key-change-this-in-production-minimum-256-bits}
+      expiration: 86400000 # 24 hours in milliseconds
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
