@@ -39,7 +39,8 @@ public class Account {
     @Column(name = "balance", nullable = false, precision = 19, scale = 2)
     private BigDecimal balance = BigDecimal.ZERO;
     
-    @Column(name = "currency", length = 3)
+    @NotBlank
+    @Column(name = "currency", length = 3, nullable = false)
     private String currency = "USD";
     
     @Column(name = "is_active")

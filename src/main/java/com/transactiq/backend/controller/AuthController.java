@@ -3,6 +3,7 @@ package com.transactiq.backend.controller;
 import com.transactiq.backend.entity.User;
 import com.transactiq.backend.repository.UserRepository;
 import com.transactiq.backend.util.JwtUtil;
+import com.transactiq.backend.util.SecurityUtil;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -46,7 +47,6 @@ public class AuthController {
             // Generate username from email (use email prefix)
             String username = request.getEmail().split("@")[0];
             if (userRepository.existsByUsername(username)) {
-                // Append number if username exists
                 int counter = 1;
                 String originalUsername = username;
                 while (userRepository.existsByUsername(username)) {
@@ -86,13 +86,7 @@ public class AuthController {
             Map<String, Object> response = new HashMap<>();
             response.put("token", token);
             
-            Map<String, Object> userData = new HashMap<>();
-            userData.put("id", savedUser.getId());
-            userData.put("email", savedUser.getEmail());
-            String fullName = (savedUser.getFirstName() + " " + savedUser.getLastName()).trim();
-            userData.put("name", fullName.isEmpty() ? savedUser.getUsername() : fullName);
-            userData.put("username", savedUser.getUsername());
-            
+            Map<String, Object> userData = buildUserData(savedUser);
             response.put("user", userData);
             
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -135,12 +129,7 @@ public class AuthController {
             Map<String, Object> response = new HashMap<>();
             response.put("token", token);
             
-            Map<String, Object> userData = new HashMap<>();
-            userData.put("id", user.getId());
-            userData.put("email", user.getEmail());
-            userData.put("name", user.getFirstName() + " " + user.getLastName());
-            userData.put("username", user.getUsername());
-            
+            Map<String, Object> userData = buildUserData(user);
             response.put("user", userData);
             
             return ResponseEntity.ok(response);
@@ -149,6 +138,53 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(createErrorResponse("Login failed: " + e.getMessage()));
         }
+    }
+    
+    /**
+     * Get current authenticated user information including role
+     * This endpoint is useful for the frontend to check user role on page load
+     */
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser() {
+        try {
+            Long userId = SecurityUtil.getCurrentUserId();
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Unauthorized"));
+            }
+            
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "User not found"));
+            }
+            
+            User user = userOpt.get();
+            
+            // Build user data response
+            Map<String, Object> userData = buildUserData(user);
+            
+            return ResponseEntity.ok(userData);
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Failed to get user info: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Helper method to build user data response
+     * Ensures consistent format across all endpoints
+     */
+    private Map<String, Object> buildUserData(User user) {
+        Map<String, Object> userData = new HashMap<>();
+        userData.put("id", user.getId());
+        userData.put("email", user.getEmail());
+        String fullName = (user.getFirstName() + " " + user.getLastName()).trim();
+        userData.put("name", fullName.isEmpty() ? user.getUsername() : fullName);
+        userData.put("username", user.getUsername());
+        userData.put("role", user.getRole() != null ? user.getRole().name().toLowerCase() : "user");
+        return userData;
     }
     
     private Map<String, Object> createErrorResponse(String message) {

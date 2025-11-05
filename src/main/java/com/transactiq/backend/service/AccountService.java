@@ -55,6 +55,14 @@ public class AccountService {
         return accountRepository.findByAccountNumber(accountNumber);
     }
     
+    /**
+     * Search accounts excluding those belonging to the specified user
+     * Used for external account search
+     */
+    public List<Account> searchAccountsExcludingUser(String query, Long excludeUserId) {
+        return accountRepository.searchAccountsExcludingUser(query, excludeUserId);
+    }
+    
     public Account updateAccount(Long id, Account accountDetails) {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Account not found with id: " + id));

@@ -38,16 +38,56 @@ public class DashboardController {
                     .map(Account::getBalance)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             
-            // Get recent payments count for all user accounts
-            long recentTransactionsCount = accounts.stream()
+            // Get all payments for user's accounts
+            List<Payment> allPayments = accounts.stream()
                     .flatMap(account -> paymentService.getPaymentsByAccountId(account.getId()).stream())
+                    .toList();
+            
+            // Get recent payments count
+            long recentTransactionsCount = allPayments.size();
+            
+            // Count pending and approved payments
+            long pendingPayments = allPayments.stream()
+                    .filter(p -> p.getStatus() == Payment.PaymentStatus.PENDING)
                     .count();
+            
+            long approvedPayments = allPayments.stream()
+                    .filter(p -> p.getStatus() == Payment.PaymentStatus.APPROVED || 
+                                p.getStatus() == Payment.PaymentStatus.COMPLETED)
+                    .count();
+            
+            // Calculate currency balances
+            Map<String, BigDecimal> currencyBalances = new HashMap<>();
+            for (Account account : accounts) {
+                String currency = account.getCurrency() != null ? account.getCurrency() : "USD";
+                currencyBalances.merge(currency, account.getBalance(), BigDecimal::add);
+            }
+            
+            // Convert to list with percentages
+            List<Map<String, Object>> currencyBalancesList = currencyBalances.entrySet().stream()
+                    .map(entry -> {
+                        Map<String, Object> currencyMap = new HashMap<>();
+                        currencyMap.put("currency", entry.getKey());
+                        currencyMap.put("balance", entry.getValue());
+                        // Calculate percentage of total balance
+                        double percentage = totalBalance.compareTo(BigDecimal.ZERO) > 0
+                                ? entry.getValue().divide(totalBalance, 4, java.math.RoundingMode.HALF_UP)
+                                        .multiply(BigDecimal.valueOf(100)).doubleValue()
+                                : 0.0;
+                        currencyMap.put("percentage", Math.round(percentage * 100.0) / 100.0);
+                        return currencyMap;
+                    })
+                    .sorted((a, b) -> ((BigDecimal) b.get("balance")).compareTo((BigDecimal) a.get("balance")))
+                    .toList();
             
             // Build response matching API spec
             Map<String, Object> dashboard = new HashMap<>();
             dashboard.put("totalBalance", totalBalance);
             dashboard.put("recentTransactions", (int) recentTransactionsCount);
             dashboard.put("activeAccounts", accounts.size());
+            dashboard.put("pendingPayments", (int) pendingPayments);
+            dashboard.put("approvedPayments", (int) approvedPayments);
+            dashboard.put("currencyBalances", currencyBalancesList);
             
             return ResponseEntity.ok(dashboard);
             
