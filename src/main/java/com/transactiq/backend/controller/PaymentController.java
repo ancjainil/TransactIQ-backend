@@ -227,6 +227,10 @@ public class PaymentController {
             response.put("currency", createdPayment.getCurrency());
             response.put("transferType", createdPayment.getTransferType() != null ? 
                 createdPayment.getTransferType().name().toLowerCase() : "internal");
+            response.put("riskScore", createdPayment.getRiskScore() != null ? createdPayment.getRiskScore() : 0);
+            response.put("riskLevel", createdPayment.getRiskLevel() != null ? 
+                createdPayment.getRiskLevel().name() : "LOW");
+            response.put("autoApproved", createdPayment.getAutoApproved() != null && createdPayment.getAutoApproved());
             
             // Add exchange rate information if currencies differ
             String fromCurrency = createdPayment.getFromAccount().getCurrency();
@@ -349,6 +353,10 @@ public class PaymentController {
                         payMap.put("currency", payment.getCurrency() != null ? payment.getCurrency() : "USD");
                         payMap.put("transferType", payment.getTransferType() != null ? 
                             payment.getTransferType().name().toLowerCase() : "internal");
+                        payMap.put("riskScore", payment.getRiskScore() != null ? payment.getRiskScore() : 0);
+                        payMap.put("riskLevel", payment.getRiskLevel() != null ? 
+                            payment.getRiskLevel().name() : "LOW");
+                        payMap.put("autoApproved", payment.getAutoApproved() != null && payment.getAutoApproved());
                         payMap.put("fromAccountId", payment.getFromAccount().getId());
                         
                         // Format fromAccount object
@@ -495,6 +503,8 @@ public class PaymentController {
             response.put("id", approvedPayment.getId());
             response.put("status", approvedPayment.getStatus().name());
             response.put("message", "Payment approved successfully");
+            response.put("approvedBy", RoleUtil.getRoleDisplayName(user));
+            response.put("approvedByRole", RoleUtil.getRoleLowercase(user));
             
             return ResponseEntity.ok(response);
             
@@ -536,6 +546,8 @@ public class PaymentController {
             response.put("id", rejectedPayment.getId());
             response.put("status", rejectedPayment.getStatus().name());
             response.put("message", "Payment rejected");
+            response.put("rejectedBy", RoleUtil.getRoleDisplayName(user));
+            response.put("rejectedByRole", RoleUtil.getRoleLowercase(user));
             
             return ResponseEntity.ok(response);
             

@@ -29,6 +29,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final ExchangeRateService exchangeRateService;
     private final N8nNotifier n8nNotifier;
+    private final RiskScoreService riskScoreService;
     
     public Payment createPayment(Payment payment, Long currentUserId) {
         // Generate transaction ID if not provided
@@ -119,9 +120,96 @@ public class PaymentService {
             payment.setConvertedCurrency(toCurrency);
         }
         
+        // Calculate risk score
+        BigDecimal riskScore = riskScoreService.calculateRiskScore(payment);
+        payment.setRiskScore(riskScore);
+        payment.setRiskLevel(riskScoreService.getRiskLevel(riskScore));
+        
         payment.setFromAccount(fromAccount);
         payment.setToAccount(toAccount);
         payment.setStatus(Payment.PaymentStatus.PENDING);
+        payment.setAutoApproved(false);
+        
+        // Save payment first
+        Payment savedPayment = paymentRepository.save(payment);
+        
+        // Auto-approve low-risk payments
+        if (riskScoreService.shouldAutoApprove(savedPayment, riskScore)) {
+            try {
+                // Check balance before auto-approving
+                Account fromAccountForAuto = savedPayment.getFromAccount();
+                if (fromAccountForAuto.getBalance().compareTo(savedPayment.getAmount()) >= 0) {
+                    // Auto-approve the payment (this will transfer funds and update status)
+                    savedPayment = autoApprovePayment(savedPayment.getId(), null);
+                }
+            } catch (Exception e) {
+                // If auto-approval fails, keep as PENDING
+                // Log error but don't throw (payment is still created)
+                System.err.println("Auto-approval failed for payment " + savedPayment.getId() + ": " + e.getMessage());
+            }
+        }
+        
+        return savedPayment;
+    }
+    
+    /**
+     * Auto-approve a payment (internal method, used for low-risk payments)
+     * This bypasses n8n notification since it's automated
+     */
+    private Payment autoApprovePayment(Long paymentId, Long approverUserId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new RuntimeException("Payment not found with id: " + paymentId));
+        
+        if (payment.getStatus() != Payment.PaymentStatus.PENDING) {
+            throw new RuntimeException("Payment is not in PENDING status");
+        }
+        
+        // Validate sufficient balance
+        Account fromAccount = payment.getFromAccount();
+        String fromCurrency = fromAccount.getCurrency();
+        java.math.BigDecimal amountToDeduct = payment.getAmount();
+        
+        if (fromAccount.getBalance().compareTo(amountToDeduct) < 0) {
+            throw new RuntimeException("Insufficient balance in from account");
+        }
+        
+        // Transfer funds with currency conversion if needed
+        Account toAccount = payment.getToAccount();
+        String toCurrency = toAccount.getCurrency();
+        
+        // Deduct from sender account
+        java.math.BigDecimal newFromBalance = fromAccount.getBalance().subtract(amountToDeduct);
+        fromAccount.setBalance(newFromBalance);
+        accountRepository.save(fromAccount);
+        
+        // Add to receiver account (with conversion if needed)
+        java.math.BigDecimal amountToAdd;
+        if (!fromCurrency.equalsIgnoreCase(toCurrency)) {
+            if (payment.getConvertedAmount() != null) {
+                amountToAdd = payment.getConvertedAmount();
+            } else {
+                amountToAdd = exchangeRateService.convertAmount(
+                    payment.getAmount(), 
+                    fromCurrency, 
+                    toCurrency
+                );
+                payment.setConvertedAmount(amountToAdd);
+            }
+        } else {
+            amountToAdd = payment.getAmount();
+        }
+        
+        java.math.BigDecimal newToBalance = toAccount.getBalance().add(amountToAdd);
+        toAccount.setBalance(newToBalance);
+        accountRepository.save(toAccount);
+        
+        // Update payment status
+        payment.setStatus(Payment.PaymentStatus.APPROVED);
+        payment.setApprovedAt(java.time.LocalDateTime.now());
+        payment.setAutoApproved(true);
+        
+        // Don't set approvedBy for auto-approved payments
+        // Don't send n8n notification for auto-approved payments
         
         return paymentRepository.save(payment);
     }

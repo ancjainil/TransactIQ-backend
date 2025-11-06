@@ -80,5 +80,47 @@ public class RoleUtil {
         }
         return user.getRole().name().toLowerCase();
     }
+    
+    /**
+     * Check if user can manage users (ADMIN only)
+     * @param user The user to check
+     * @return true if user is ADMIN, false otherwise
+     */
+    public static boolean canManageUsers(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+        return user.getRole() == User.UserRole.ADMIN;
+    }
+    
+    /**
+     * Check if user can view all accounts (ADMIN only)
+     * @param user The user to check
+     * @return true if user is ADMIN, false otherwise
+     */
+    public static boolean canViewAllAccounts(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+        return user.getRole() == User.UserRole.ADMIN;
+    }
+    
+    /**
+     * Check if user can access checker dashboard (CHECKER or ADMIN)
+     * @param user The user to check
+     * @return true if user is CHECKER or ADMIN, false otherwise
+     */
+    public static boolean canAccessCheckerDashboard(User user) {
+        return canApprovePayments(user);
+    }
+    
+    /**
+     * Check if user can access admin panel (ADMIN only)
+     * @param user The user to check
+     * @return true if user is ADMIN, false otherwise
+     */
+    public static boolean canAccessAdminPanel(User user) {
+        return isAdmin(user);
+    }
 }
 

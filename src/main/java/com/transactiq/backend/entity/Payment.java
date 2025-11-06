@@ -55,6 +55,16 @@ public class Payment {
     @Enumerated(EnumType.STRING)
     private TransferType transferType = TransferType.INTERNAL; // Default to internal
     
+    @Column(name = "risk_score", precision = 5, scale = 2)
+    private BigDecimal riskScore; // Risk score 0-100
+    
+    @Column(name = "risk_level", length = 20)
+    @Enumerated(EnumType.STRING)
+    private RiskLevel riskLevel; // LOW, MEDIUM, HIGH, VERY_HIGH
+    
+    @Column(name = "auto_approved")
+    private Boolean autoApproved = false; // True if auto-approved based on risk score
+    
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "from_account_id", nullable = false)
     private Account fromAccount;
@@ -84,6 +94,13 @@ public class Payment {
     public enum TransferType {
         INTERNAL,
         EXTERNAL
+    }
+    
+    public enum RiskLevel {
+        LOW,        // 0-30
+        MEDIUM,     // 31-60
+        HIGH,       // 61-80
+        VERY_HIGH   // 81-100
     }
 }
 
