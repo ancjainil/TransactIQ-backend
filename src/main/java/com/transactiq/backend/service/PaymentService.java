@@ -13,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +28,7 @@ public class PaymentService {
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
     private final ExchangeRateService exchangeRateService;
+    private final N8nNotifier n8nNotifier;
     
     public Payment createPayment(Payment payment, Long currentUserId) {
         // Generate transaction ID if not provided
@@ -220,13 +223,84 @@ public class PaymentService {
         payment.setApprovedAt(LocalDateTime.now());
         
         // Set approver if provided
+        User approver = null;
         if (approverUserId != null) {
-            User approver = userRepository.findById(approverUserId)
+            approver = userRepository.findById(approverUserId)
                     .orElse(null);
             payment.setApprovedBy(approver);
         }
         
-        return paymentRepository.save(payment);
+        // Save payment
+        Payment approvedPayment = paymentRepository.save(payment);
+        
+        // Send n8n webhook notification for payment approval
+        sendPaymentApprovedNotification(approvedPayment, approver);
+        
+        return approvedPayment;
+    }
+    
+    /**
+     * Send n8n webhook notification when payment is approved
+     */
+    private void sendPaymentApprovedNotification(Payment payment, User approver) {
+        try {
+            // Get the user who created the payment (fromAccount owner)
+            User paymentCreator = payment.getFromAccount().getUser();
+            
+            // Build payload
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("transactionId", payment.getTransactionId());
+            payload.put("amount", payment.getAmount());
+            payload.put("currency", payment.getCurrency());
+            payload.put("approvedAt", payment.getApprovedAt() != null ? 
+                payment.getApprovedAt().toString() : LocalDateTime.now().toString());
+            
+            // Add approver information
+            if (approver != null) {
+                String approverName = (approver.getFirstName() != null ? approver.getFirstName() : "") + 
+                                     " " + (approver.getLastName() != null ? approver.getLastName() : "");
+                approverName = approverName.trim();
+                if (approverName.isEmpty()) {
+                    approverName = approver.getUsername();
+                }
+                payload.put("approvedBy", approverName);
+                payload.put("approvedByEmail", approver.getEmail());
+            } else {
+                payload.put("approvedBy", "System");
+                payload.put("approvedByEmail", null);
+            }
+            
+            // Add recipient email (user email who created the payment - fromAccount owner)
+            payload.put("toEmail", paymentCreator.getEmail());
+            String creatorName = (paymentCreator.getFirstName() != null ? paymentCreator.getFirstName() : "") + 
+                                " " + (paymentCreator.getLastName() != null ? paymentCreator.getLastName() : "");
+            creatorName = creatorName.trim();
+            if (creatorName.isEmpty()) {
+                creatorName = paymentCreator.getUsername();
+            }
+            payload.put("toEmailName", creatorName);
+            
+            // Add additional payment details
+            payload.put("description", payment.getDescription());
+            payload.put("status", payment.getStatus().name());
+            payload.put("transferType", payment.getTransferType() != null ? 
+                payment.getTransferType().name() : "INTERNAL");
+            
+            // Add conversion info if applicable
+            if (payment.getExchangeRate() != null && payment.getExchangeRate().compareTo(java.math.BigDecimal.ONE) != 0) {
+                payload.put("convertedAmount", payment.getConvertedAmount());
+                payload.put("convertedCurrency", payment.getConvertedCurrency());
+                payload.put("exchangeRate", payment.getExchangeRate());
+            }
+            
+            // Send notification
+            n8nNotifier.sendEvent("payment_approved", payload);
+            
+        } catch (Exception e) {
+            // Log error but don't throw exception (non-blocking)
+            System.err.println("Failed to send payment approval notification: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     public Payment rejectPayment(Long paymentId, Long rejectorUserId) {
